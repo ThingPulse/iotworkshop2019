@@ -1,19 +1,22 @@
 #include <Arduino.h>
 
 #include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <ESPAsyncWiFiManager.h>
+#include <WiFiMulti.h>
 
+#include "config.h"
 
+WiFiMulti wiFiMulti;
 
 void startWiFi() {
-  AsyncWebServer server(80);
-  DNSServer dns;
+  WiFi.mode(WIFI_STA);
+  wiFiMulti.addAP(ssid, wifipw);
 
-  AsyncWiFiManager wifiManager(&server,&dns);
-  wifiManager.autoConnect("AutoConnectAP");
-
-  log_v("Connected to WiFi");
+  // wait for WiFi connection
+  log_v("Waiting for WiFi to connect...");
+  while ((wiFiMulti.run() != WL_CONNECTED)) {
+    log_v(".");
+  }
+  log_v(" connected");
 }
 
 void setup() {

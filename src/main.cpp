@@ -7,6 +7,8 @@
 
 #include "config.h"
 
+// Name derived from external file name
+// See: https://docs.platformio.org/en/latest/platforms/espressif32.html#embedding-binary-data
 extern const uint8_t rootCACertificate[] asm("_binary_src_rootCA_pem_start");
 
 WiFiMulti wiFiMulti;
@@ -51,23 +53,24 @@ void sendPush() {
   
       log_v("[HTTPS] begin...\n");
 
-      if (https.begin(*client, "https://api.pushbullet.com/v2/users/me")) {  // HTTPS
-        log_v("[HTTPS] GET...");
+      if (https.begin(*client, "https://api.pushbullet.com/v2/pushes")) {  // HTTPS
+        log_v("[HTTPS] POST...");
         // start connection and send HTTP header
         https.addHeader("Access-Token", apikey);
-        int httpCode = https.GET();
+        https.addHeader("Content-Type",  "application/json");
+        int httpCode = https.POST("{\"body\":\"My first push\",\"title\":\"Hello World\",\"type\":\"note\"}");
   
         // httpCode will be negative on error
         if (httpCode > 0) {
           // HTTP header has been send and Server response header has been handled
-          log_v("[HTTPS] GET... code: %d", httpCode);
+          log_v("[HTTPS] POST... code: %d", httpCode);
   
           // file found at server
           if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
             log_v("Response: %s", https.getString().c_str());
           }
         } else {
-          log_e("[HTTPS] GET... failed, error: %s", https.errorToString(httpCode).c_str());
+          log_e("[HTTPS] POST... failed, error: %s", https.errorToString(httpCode).c_str());
         }
   
         https.end();

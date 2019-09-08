@@ -4,6 +4,7 @@
 #include <WiFiMulti.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
 
 #include "config.h"
 
@@ -88,6 +89,66 @@ void sendPush() {
 
 }
 
+void sendUploadRequest() {
+  WiFiClientSecure *client = new WiFiClientSecure;
+  if(client) {
+    client -> setCACert((const char *)rootCACertificate);
+
+    {
+      // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is 
+      HTTPClient https;
+  
+      log_v("[HTTPS] begin...\n");
+ 
+      if (https.begin(*client, "https://api.pushbullet.com/v2/upload-request")) {  // HTTPS
+        log_v("[HTTPS] POST...\n");
+        // start connection and send HTTP header
+        https.addHeader("Access-Token", apikey);
+        https.addHeader("Content-Type", "application/json");
+        int httpCode = https.POST("{\"file_name\":\"cat.jpg\",\"file_type\":\"image/jpeg\"}");
+  
+        if (httpCode > 0) {
+          // HTTP header has been send and Server response header has been handled
+          log_v("[HTTPS] GET... code: %d\n", httpCode);
+  
+          // file found at server
+          if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+            String payload = https.getString();
+
+            DynamicJsonDocument doc(1024);
+            DeserializationError err = deserializeJson(doc, payload);
+            JsonObject obj = doc.as<JsonObject>();
+            if (err) {
+              log_e("deserializeJson() failed with code: %s ", err.c_str());
+              return;
+            }
+            String uploadUrl = obj["upload_url"].as<String>();
+            String fileUrl = doc["file_url"].as<String>();
+            log_v("Upload url: %s, fileUrl: %s, ", uploadUrl.c_str(), fileUrl.c_str());
+
+            return;
+
+          }
+        } else {
+          log_e("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
+        }
+  
+        https.end();
+      } else {
+        log_e("[HTTPS] Unable to connect\n");
+      }
+
+      // End extra scoping block
+    }
+  
+    delete client;
+  } else {
+    Serial.println("Unable to create client");
+  }
+
+}
+
+
 void setup() {
   Serial.begin(115200);
   log_v("Hello world: %d", millis());
@@ -99,6 +160,8 @@ void setup() {
   startWiFi();
 
   setClock();
+
+  sendUploadRequest();
 
   sendPush();
 }

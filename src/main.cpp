@@ -12,6 +12,12 @@
 // See: https://docs.platformio.org/en/latest/platforms/espressif32.html#embedding-binary-data
 extern const uint8_t rootCACertificate[] asm("_binary_src_rootCA_pem_start");
 
+typedef struct FileUpload {
+  uint8_t status;
+  String uploadUrl;
+  String fileUrl;
+} FileUpload;
+
 WiFiMulti wiFiMulti;
 
 void startWiFi() {
@@ -43,7 +49,7 @@ void setClock() {
   log_v("Current time: %s", asctime(&timeinfo));
 }
 
-void sendPush() {
+void sendPush(FileUpload *fileUpload) {
   WiFiClientSecure *client = new WiFiClientSecure;
   if(client) {
     client -> setCACert((const char *)rootCACertificate);
@@ -89,7 +95,7 @@ void sendPush() {
 
 }
 
-void sendUploadRequest() {
+void sendUploadRequest(FileUpload *fileUpload) {
   WiFiClientSecure *client = new WiFiClientSecure;
   if(client) {
     client -> setCACert((const char *)rootCACertificate);
@@ -122,14 +128,16 @@ void sendUploadRequest() {
               log_e("deserializeJson() failed with code: %s ", err.c_str());
               return;
             }
-            String uploadUrl = obj["upload_url"].as<String>();
-            String fileUrl = doc["file_url"].as<String>();
-            log_v("Upload url: %s, fileUrl: %s, ", uploadUrl.c_str(), fileUrl.c_str());
+            fileUpload->status = httpCode;
+            fileUpload->uploadUrl = obj["upload_url"].as<String>();
+            fileUpload->fileUrl = doc["file_url"].as<String>();
+            log_v("Upload url: %s, fileUrl: %s, ", fileUpload->uploadUrl.c_str(), fileUpload->fileUrl.c_str());
 
             return;
 
           }
         } else {
+          fileUpload->status = httpCode;
           log_e("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
         }
   
@@ -145,6 +153,8 @@ void sendUploadRequest() {
   } else {
     Serial.println("Unable to create client");
   }
+  fileUpload->status = -1;
+  return;
 
 }
 
@@ -161,9 +171,12 @@ void setup() {
 
   setClock();
 
-  sendUploadRequest();
+  FileUpload fileUpload;
 
-  sendPush();
+  sendUploadRequest(&fileUpload);
+  if (fileUpload.status >=200 && fileUpload.status < 300) {
+    sendPush(&fileUpload);
+  }
 }
 
 void loop() {

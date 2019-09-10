@@ -274,6 +274,10 @@ void setup() {
     postFile(&fileUpload, fb);
     sendPush(&fileUpload);
   }
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_39,1);
+  log_i("Going to sleep");
+  esp_deep_sleep_start();
 }
 
 void loop() {

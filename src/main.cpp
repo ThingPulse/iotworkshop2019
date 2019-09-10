@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include "camera.h"
 
 #include "config.h"
 
@@ -162,7 +163,7 @@ void sendUploadRequest(FileUpload *fileUpload) {
 
 }
 
-void postFile(FileUpload* fileUpload) {
+void postFile(FileUpload* fileUpload, camera_fb_t * fb) {
   log_i("------ Starting file upload -------");
   WiFiClientSecure *client = new WiFiClientSecure;
   if(client) {
@@ -177,8 +178,8 @@ void postFile(FileUpload* fileUpload) {
  
       if (https.begin(*client, fileUpload->uploadUrl)) {  // HTTPS
         String boundary = "AX0011";
-        int fileSize = cat_end - cat_start;
-        const uint8_t* filePayload = cat_start;
+        int fileSize = fb->len;
+        const uint8_t* filePayload = fb->buf;
         String contentType = "image/jpeg";
 
         Serial.print("[HTTPS] POST...\n");
@@ -247,6 +248,21 @@ void setup() {
   log_w("Total PSRAM: %d", ESP.getPsramSize());
   log_e("Total heap: %d", ESP.getHeapSize());
 
+  // Init with config
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+      log_e("Camera init failed with error 0x%x", err);
+      return;
+  }
+
+  // Acquire Image
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
+      log_e("Camera capture failed");
+      return;
+  }
+
   startWiFi();
 
   setClock();
@@ -255,7 +271,7 @@ void setup() {
 
   sendUploadRequest(&fileUpload);
   if (fileUpload.status >=200 && fileUpload.status < 400) {
-    postFile(&fileUpload);
+    postFile(&fileUpload, fb);
     sendPush(&fileUpload);
   }
 }

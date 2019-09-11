@@ -12,19 +12,19 @@ void startWiFi() {
   wiFiMulti.addAP(ssid, wifipw);
 
   // wait for WiFi connection
-  log_v("Waiting for WiFi to connect...");
+  log_i("Waiting for WiFi to connect...");
   while ((wiFiMulti.run() != WL_CONNECTED)) {
-    log_v(".");
+    log_i(".");
   }
-  log_v(" connected");
+  log_i(" connected");
 }
 
 void setup() {
-  log_v("Hello world: %d", millis());
-  log_d("Free PSRAM: %d", ESP.getFreePsram());
+  log_i("Hello world: %d", millis());
+  log_i("Free PSRAM: %d", ESP.getFreePsram());
   log_i("Free heap: %d", ESP.getFreeHeap());
-  log_w("Total PSRAM: %d", ESP.getPsramSize());
-  log_e("Total heap: %d", ESP.getHeapSize());
+  log_i("Total PSRAM: %d", ESP.getPsramSize());
+  log_i("Total heap: %d", ESP.getHeapSize());
 
   startWiFi();
 }

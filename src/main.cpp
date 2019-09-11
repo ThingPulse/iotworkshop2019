@@ -243,10 +243,10 @@ void postFile(FileUpload* fileUpload, camera_fb_t * fb) {
 void setup() {
   Serial.begin(115200);
   log_i("Hello world: %d", millis());
-  log_d("Free PSRAM: %d", ESP.getFreePsram());
+  log_i("Free PSRAM: %d", ESP.getFreePsram());
   log_i("Free heap: %d", ESP.getFreeHeap());
-  log_w("Total PSRAM: %d", ESP.getPsramSize());
-  log_e("Total heap: %d", ESP.getHeapSize());
+  log_i("Total PSRAM: %d", ESP.getPsramSize());
+  log_i("Total heap: %d", ESP.getHeapSize());
 
   // Init with config
   esp_err_t err = esp_camera_init(&config);

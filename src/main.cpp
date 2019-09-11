@@ -242,10 +242,10 @@ void postFile(FileUpload* fileUpload) {
 void setup() {
   Serial.begin(115200);
   log_i("Hello world: %d", millis());
-  log_d("Free PSRAM: %d", ESP.getFreePsram());
+  log_i("Free PSRAM: %d", ESP.getFreePsram());
   log_i("Free heap: %d", ESP.getFreeHeap());
-  log_w("Total PSRAM: %d", ESP.getPsramSize());
-  log_e("Total heap: %d", ESP.getHeapSize());
+  log_i("Total PSRAM: %d", ESP.getPsramSize());
+  log_i("Total heap: %d", ESP.getHeapSize());
 
   startWiFi();
 

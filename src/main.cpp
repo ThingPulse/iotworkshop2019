@@ -164,79 +164,133 @@ void sendUploadRequest(FileUpload *fileUpload) {
 }
 
 void postFile(FileUpload* fileUpload, camera_fb_t * fb) {
-  log_i("------ Starting file upload -------");
-  WiFiClientSecure *client = new WiFiClientSecure;
-  if(client) {
-    client -> setCACert((const char *)rootCACertificate);
-
-    {
-      // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is 
-      HTTPClient https;
-      https.setReuse(true);
-      Serial.print("[HTTPS] begin...\n");
-
- 
-      if (https.begin(*client, fileUpload->uploadUrl)) {  // HTTPS
-        String boundary = "AX0011";
-        int fileSize = fb->len;
-        const uint8_t* filePayload = fb->buf;
-        String contentType = "image/jpeg";
-
-        Serial.print("[HTTPS] POST...\n");
-        // start connection and send HTTP header
-        https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-
-        // request header
-        String requestHead = "--" + boundary + "\r\n";
-        requestHead += "Content-Disposition: form-data; name=\"file\"; filename=\"cat.jpg\"\r\n";
-        requestHead += "Content-Type: " + contentType + "\r\n\r\n";
-
-        // request tail
-        String requestTail = "\r\n\r\n--" + boundary + "--\r\n\r\n";
-
-        int contentLength = requestHead.length() + fileSize + requestTail.length();
-
-        https.addHeader("Content-Length", String(contentLength));
-        log_i("Content-Length: %d", contentLength);
-
-        uint8_t *payload = (uint8_t*) malloc(contentLength);
-        memcpy(payload, requestHead.c_str(), requestHead.length());
-        memcpy(payload + requestHead.length(), filePayload, fileSize);
-        memcpy(payload + requestHead.length() + fileSize, requestTail.c_str(), requestTail.length());
-
-        int httpCode = https.POST(payload, contentLength);
-  
-        free(payload);
-        // httpCode will be negative on error
-        if (httpCode > 0) {
-          // HTTP header has been send and Server response header has been handled
-          Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
-  
-          // file found at server
-          if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-            Serial.println(https.getString());
-            
-
-          }
-        } else {
-
-          Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
-        }
-  
-        https.end();
-      } else {
-        Serial.printf("[HTTPS] Unable to connect\n");
-      }
-
-      // End extra scoping block
-    }
-  
-    delete client;
-
-  } else {
-    Serial.println("Unable to create client");
+  String url = fileUpload->uploadUrl;
+  /**************************************************************************** 
+   * 
+   * Start URL parsing
+   * 
+   */
+  int index = url.indexOf(':');
+  if(index < 0) {
+      log_e("failed to parse protocol");
+      return;
   }
 
+  url.remove(0, (index + 3)); // remove http:// or https://
+
+  index = url.indexOf('/');
+  String host = url.substring(0, index);
+  url.remove(0, index); // remove host part
+
+  // get Authorization
+  index = host.indexOf('@');
+  if(index >= 0) {
+      // auth info
+      String auth = host.substring(0, index);
+      host.remove(0, index + 1); // remove auth part including @
+  }
+  String post_host;
+  // get port
+  index = host.indexOf(':');
+  if(index >= 0) {
+      post_host = host.substring(0, index); // hostname
+      host.remove(0, (index + 1)); // remove hostname + :
+      post_host = host.toInt(); // get port
+  } else {
+      post_host = host;
+  }
+  String path = url;
+  /** END URL parsing ********************************************************/
+
+  log_i("------ Starting file upload -------");
+  WiFiClientSecure *client = new WiFiClientSecure;
+  String fileName = "cat.jpg";
+  uint32_t fileSize = fb->len;
+  uint16_t post_port = 443;
+
+  // print content length and host
+  log_i("content length: %d", fileSize);
+  log_i("connecting to '%s'", post_host.c_str());
+
+  // try connect or return on fail
+  if (!client->connect(post_host.c_str(), post_port)) {
+    log_e("HTTP connection failure");
+    return;
+  }
+
+  // Create a URI for the request
+  log_i("Connected to server");
+  log_i("Requesting URL: '%s'", url.c_str());
+
+  // Make a HTTP request and add HTTP headers
+  String boundary = "AX0011";
+  String contentType = "image/jpeg";
+  String portString = String(post_port);
+  String hostString = String(post_host);
+
+  // POST headers
+  String postHeader = "POST " + path + " HTTP/1.1\r\n";
+  postHeader += "Host: " + hostString + "\r\n";
+  postHeader += "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n";
+  postHeader += "User-Agent: ESP32/mailbox-cam\r\n";
+  postHeader += "Keep-Alive: 300\r\n";
+  postHeader += "Connection: keep-alive\r\n";
+
+  // request head
+  String requestHead = "--" + boundary + "\r\n";
+  requestHead += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n";
+  requestHead += "Content-Type: " + contentType + "\r\n\r\n";
+
+  // request tail
+  String tail = "\r\n\r\n--" + boundary + "--\r\n\r\n";
+
+  // content length
+  int contentLength = requestHead.length() + fileSize + tail.length();
+  postHeader += "Content-Length: " + String(contentLength, DEC) + "\r\n\r\n";
+
+  /* START communication */
+  log_i("%s", postHeader.c_str());
+  client->print(postHeader.c_str());
+
+  log_i("%s", requestHead.c_str());
+  client->print(requestHead.c_str());
+
+  size_t sent = 0;
+  size_t remaining = fileSize;
+  size_t offset = 0;
+  while (true) {
+    sent = client->write(fb->buf + offset, remaining);
+    remaining = remaining - sent;
+    offset += sent;
+    log_i("Sent: %d, remaining: %d, offset: %d", sent, remaining, offset);
+    if (remaining <= 0 || sent <= 0) {
+      break;
+    }
+  }
+
+  log_i("%s", tail.c_str());
+  client->print(tail.c_str());
+
+  log_i("request sent, waiting for response");
+
+  while (client->connected()) {
+    String line = client->readStringUntil('\n');
+    log_i("%s", line.c_str());
+    if (line == "\r") {
+      log_i("done receiving headers");
+      break;
+    }
+  }
+
+  String line = client->readStringUntil('\n');
+
+  log_i("response body");
+  log_i("==========");
+  log_i("%s", line.c_str());
+  log_i("==========");
+  log_i("closing connection");  
+
+  delete client;
 }
 
 
@@ -275,9 +329,9 @@ void setup() {
     sendPush(&fileUpload);
   }
 
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_39,1);
-  log_i("Going to sleep");
-  esp_deep_sleep_start();
+  // esp_sleep_enable_ext0_wakeup(GPIO_NUM_39,1);
+  // log_i("Going to sleep");
+  // esp_deep_sleep_start();
 }
 
 void loop() {
